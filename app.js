@@ -4,23 +4,32 @@ if (process.env.NODE_ENV !== 'production') {
 
 
 // External dependencies
-const path        = require('path');
-const express     = require('express');
-const flash       = require('express-flash');
-const session     = require('express-session');
-const browserSync = require('browser-sync');
-const helmet      = require('helmet');
-const compression = require('compression');
-const nunjucks    = require('nunjucks');
-const passport    = require('passport');
+const path         = require('path');
+const express      = require('express');
+const flash        = require('express-flash');
+const session      = require('express-session');
+const browserSync  = require('browser-sync');
+const helmet       = require('helmet');
+const compression  = require('compression');
+const nunjucks     = require('nunjucks');
+const passport     = require('passport');
+const cookieParser = require('cookie-parser');
 
 
 // Local dependencies
-const config  = require('./app/config');
+const config = require('./app/config');
 
 
 // Initialise express application
 const app = express();
+
+
+// Redis
+let RedisStore = require('connect-redis')(session);
+const { createClient } = require('redis');
+let redisClient = createClient({ legacyMode: true })
+
+redisClient.connect().catch(console.error);
 
 
 app.use(express.json());
@@ -28,15 +37,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/assets', express.static(path.join(__dirname, '/node_modules/govuk-frontend/govuk/assets')));
 app.use('/node_modules/govuk-frontend', express.static(path.join(__dirname, '/node_modules/govuk-frontend/govuk')));
-
-app.use(session( {
-  secret: config.secret,
-  resave: false, // Don’t save session if unmodified
-  saveUninitialized: false, // Don’t create session until something stored
-  cookie: {
-    secure: false
-  }
-}));
 
 
 const users = [
@@ -53,6 +53,19 @@ initializePassport(
   passport, 
   email => users.find(user => user.email === email),
   id => users.find(user => user.id === id)
+);
+
+
+
+app.use(cookieParser());
+
+app.use(
+  session( {
+    store: new RedisStore({ client: redisClient }),
+    secret: config.secret,
+    resave: false,
+    saveUninitialized: true
+  })
 );
 
 app.use(passport.initialize());
